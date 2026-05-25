@@ -1,4 +1,4 @@
-# Cerberus — Weak Monitor Capability Sweep (v0.1.1)
+# Scalable Oversight — Weak Monitor Capability Sweep (v0.1.1)
 
 Experimental infrastructure for studying **scalable oversight**: can a weaker (smaller) model reliably act as a monitor over a stronger coding agent?
 
