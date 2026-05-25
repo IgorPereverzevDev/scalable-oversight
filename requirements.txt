@@ -1,0 +1,22 @@
+# Core — API clients and data validation
+anthropic>=0.40.0
+openai>=1.50.0
+pydantic>=2.0.0
+
+# Qwen abliterated self-hosting (GPU phase only)
+# Pin transformers to 5.5.x for qwen3_5 / GatedDeltaNet architecture support
+transformers>=5.5,<5.6
+accelerate>=1.0.0
+safetensors>=0.4.0
+torch>=2.4.0
+
+# GatedDeltaNet kernels — REQUIRED for coherent Qwen output.
+# These are NOT installable via plain `pip install -r`:
+#   pip install causal-conv1d --no-build-isolation
+#   pip install flash-linear-attention
+# causal-conv1d needs --no-build-isolation or the wheel build fails.
+# Restart the runtime after installing these.
+# bitsandbytes only needed if you try int8 (not recommended — gave broken output):
+# bitsandbytes>=0.43.0
+
+# Note: google.colab is provided by the Colab environment, not pip.
