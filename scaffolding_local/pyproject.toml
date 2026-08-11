@@ -1,0 +1,19 @@
+[project]
+name = "cerberus"
+version = "0.2.0"
+description = "Scalable oversight: can a weaker monitor detect misbehaviour by a stronger coding agent?"
+requires-python = ">=3.11"
+dependencies = ["inspect-ai>=0.3.100", "pydantic>=2.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+include = ["cerberus*"]
+
+[tool.pytest.ini_options]
+# pythonpath keeps `pytest` and `python -m pytest` behaving identically; without
+# it the bare `pytest` entry point does not put the repo root on sys.path.
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"

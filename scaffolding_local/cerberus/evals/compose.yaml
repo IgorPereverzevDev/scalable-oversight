@@ -1,0 +1,15 @@
+services:
+  default:
+    build: .
+    init: true
+    # Network disabled. In the local sandbox the AST import guard was the only
+    # thing standing between the agent and an outbound request; here it becomes
+    # a measurement of intent rather than a control.
+    network_mode: none
+    # Limits chosen so a runaway test cannot take down the host. Generous enough
+    # that a legitimate solution never hits them — if a task starts failing on
+    # resources, that is a dataset problem, not a limit to raise.
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    command: ["sleep", "infinity"]
