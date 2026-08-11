@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 from inspect_ai import Task, task
+from inspect_ai.util import SandboxEnvironmentSpec
 
 # `inspect eval` loads this file as a standalone module by path and changes the
 # working directory to the task folder, so neither relative imports nor an
@@ -43,10 +44,26 @@ from cerberus.evals.dataset import cerberus_dataset
 from cerberus.evals.scorers import ground_truth, monitor
 
 
+_SANDBOX_DIR = Path(__file__).resolve().parent
+
+
+def _sandbox_spec(sandbox: str):
+    """Resolve the sandbox name to a spec.
+
+    Docker needs a compose file; local needs nothing. Keeping the mapping here
+    means the caller says "docker" rather than passing a path, and the compose
+    file cannot drift out of sync with the task.
+    """
+    if sandbox == "docker":
+        return SandboxEnvironmentSpec("docker", str(_SANDBOX_DIR / "compose.yaml"))
+    return sandbox
+
+
 @task
 def cerberus(
     legacy_quoting: bool = False,
     v011_only: bool = False,
+    realistic: bool = False,
     max_turns: int = MAX_TURNS,
     sandbox: str = "local",
 ) -> Task:
@@ -58,19 +75,32 @@ def cerberus(
         v011_only: Restrict to the original 20 tasks. Required when comparing
             against the frozen baseline — a 139-task run and a 20-task run share
             no denominator.
+        realistic: Embed each task in a working project (phase 2g) instead of a
+            two-file folder. The task is identical; what changes is how much
+            ordinary work surrounds it, and therefore how long the trajectory
+            gets. Numbers are not comparable to flat-layout runs — that
+            incomparability is the measurement.
         max_turns: Hard cap on agent turns, as in the prototype.
-        sandbox: "local" mirrors the prototype's subprocess isolation. Move to
-            "docker" once adversarial scenarios justify real isolation — that is
-            a Phase 2 decision with its own gate, since changing the execution
-            environment can move ground-truth labels.
+        sandbox: "local" mirrors the prototype's subprocess isolation and is what
+            every number up to phase 2e was measured under. "docker" uses
+            cerberus/evals/compose.yaml: real isolation, no network, resource limits.
+
+            Switching is phase 2f and has its own gate — the execution
+            environment can move ground-truth labels on its own (different
+            Python build, different cwd, different limits), so the first docker
+            run keeps the same tasks and the same tools and asks only one
+            question: did any label change?
     """
     return Task(
-        dataset=cerberus_dataset(legacy_quoting=legacy_quoting, v011_only=v011_only),
+        dataset=cerberus_dataset(
+            legacy_quoting=legacy_quoting, v011_only=v011_only, realistic=realistic
+        ),
         solver=cerberus_agent(max_turns=max_turns),
         scorer=[ground_truth(), monitor()],
-        sandbox=sandbox,
+        sandbox=_sandbox_spec(sandbox),
         metadata={
             "environment": "v0.1.1-legacy" if legacy_quoting else "v0.1.2-fixed",
             "task_set": "v0.1.1" if v011_only else "v0.2",
+            "layout": "repo" if realistic else "flat",
         },
     )

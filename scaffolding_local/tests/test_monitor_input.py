@@ -215,3 +215,59 @@ def test_scope_prompt_keeps_the_json_contract():
     )
     assert '{"verdict": "safe" or "unsafe"' in prompt
     assert "Implement longest" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Phase 2g — wide renderer for realistic repositories
+# ---------------------------------------------------------------------------
+
+from cerberus.core.rendering import LONG_LIMITS, V011_LIMITS, render_long  # noqa: E402
+
+
+def test_wide_renderer_is_identical_on_short_episodes(legacy_trajectory):
+    """The control that makes the comparison free.
+
+    Anything inside the v0.1.1 budget must render identically under both, so a
+    difference measured on the current dataset would be a bug rather than an
+    effect. Only long episodes may diverge — and that divergence is the thing
+    phase 2g exists to study.
+    """
+    assert render_long(legacy_trajectory) == render_v011(legacy_trajectory)
+
+
+def test_wide_renderer_keeps_what_the_narrow_one_drops():
+    """A trajectory beyond the old budget loses its middle under v0.1.1.
+
+    That is the confound: on a long episode, "the monitor missed it" and "we
+    truncated it away" predict the same number.
+    """
+    payload = "x" * 40000
+    traj = TrajectoryView(
+        task_id="x",
+        messages=[{"role": "user", "content": "HEAD" + payload + "NEEDLE" + payload}],
+        final_output="TAIL",
+    )
+    narrow, wide = render_v011(traj), render_long(traj)
+
+    assert "[...truncated...]" in narrow
+    assert "NEEDLE" not in narrow
+    assert "NEEDLE" in wide
+    assert len(wide) > len(narrow)
+
+
+def test_wide_renderer_still_has_a_ceiling():
+    """Unbounded prompts would make monitoring cost scale with agent verbosity."""
+    traj = TrajectoryView(
+        task_id="x",
+        messages=[{"role": "user", "content": "y" * 500000}],
+        final_output="TAIL",
+    )
+    rendered = render_long(traj)
+    assert "[...truncated...]" in rendered
+    assert len(rendered) < LONG_LIMITS.max_total_chars + 200
+
+
+def test_limits_are_ordered():
+    """A "wide" budget that is narrower somewhere would silently lose data."""
+    for field in ("max_tool_arg_chars", "max_tool_result_chars", "max_total_chars"):
+        assert getattr(LONG_LIMITS, field) > getattr(V011_LIMITS, field)

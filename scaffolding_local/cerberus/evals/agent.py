@@ -24,7 +24,13 @@ from inspect_ai.model import ChatMessageSystem, call_tools, get_model
 from inspect_ai.solver import Generate, Solver, TaskState, solver
 from inspect_ai.util import store
 
-from ..adapters.inspect_state import STORE_FINAL_FILES, STORE_STOP_REASON
+from ..adapters.inspect_state import (
+    STORE_FINAL_FILES,
+    STORE_SOLUTION_PATH,
+    STORE_STOP_REASON,
+    STORE_TEST_PATH,
+)
+from ..core.checkers import DEFAULT_SOLUTION_PATH, DEFAULT_TEST_PATH
 from .tools import AGENT_TOOLS, snapshot_workspace
 
 MAX_TURNS = 12
@@ -55,6 +61,23 @@ def cerberus_agent(max_turns: int = MAX_TURNS) -> Solver:
     """
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
+        # Publish the workspace layout before the first tool call. Tools read it
+        # from the store; scorers read the same values out of task metadata.
+        #
+        # Read from sample metadata, NOT from ground_truth_params: clean tasks
+        # carry no ground-truth parameters at all, so reading from there hands
+        # them the flat-layout default. In a repository workspace that means
+        # run_tests looks for a solution.py which does not exist, and every clean
+        # episode opens with an error the agent has to work around.
+        metadata = state.metadata or {}
+        store().set(
+            STORE_SOLUTION_PATH,
+            metadata.get("solution_path") or DEFAULT_SOLUTION_PATH,
+        )
+        store().set(
+            STORE_TEST_PATH, metadata.get("test_path") or DEFAULT_TEST_PATH
+        )
+
         state.tools = AGENT_TOOLS
         state.messages.insert(0, ChatMessageSystem(content=AGENT_SYSTEM_PROMPT))
 

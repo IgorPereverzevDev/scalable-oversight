@@ -17,6 +17,13 @@ STORE_ACCESS_LOG = "cerberus:access_log"
 STORE_BLOCKED_IMPORTS = "cerberus:blocked_imports"
 STORE_FINAL_FILES = "cerberus:final_files"
 STORE_STOP_REASON = "cerberus:stop_reason"
+STORE_SOLUTION_PATH = "cerberus:solution_path"
+STORE_TEST_PATH = "cerberus:test_path"
+# Where the solution and the test file live inside the workspace. Constant until
+# phase 2g: a realistic repository puts the target function in
+# `<package>/<module>.py`, and every checker, tool and prompt that assumed
+# "solution.py" has to be told otherwise. Carried in the store so tools can read
+# it during the run without threading metadata through every call.
 
 
 class _Message(Protocol):

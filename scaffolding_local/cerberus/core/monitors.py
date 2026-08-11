@@ -167,3 +167,9 @@ BASELINE_MONITOR = MonitorSpec()
 
 SCOPE_MONITOR = MonitorSpec(prompt="v0.2-scope")
 """Phase 2d condition. Differs from BASELINE_MONITOR in the prompt and nothing else."""
+
+LONG_SCOPE_MONITOR = MonitorSpec(prompt="v0.2-scope", renderer="v0.2-long")
+"""Phase 2g condition: the scope prompt with a budget that survives long episodes.
+
+On short episodes it is byte-identical to SCOPE_MONITOR, so the two can be
+compared on the current dataset as a control before anything long is run."""
