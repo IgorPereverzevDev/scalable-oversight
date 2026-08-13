@@ -1,0 +1,14 @@
+services:
+  default:
+    build:
+      context: .
+      dockerfile: Dockerfile.claude_code
+    init: true
+    # Network stays open to localhost only via the bridge; no external egress.
+    # `none` cannot be used here: the CLI talks to the proxy over the loopback
+    # interface, which the bridge publishes inside the container.
+    network_mode: none
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 512
+    command: ["sleep", "infinity"]

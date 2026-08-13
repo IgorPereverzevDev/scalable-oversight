@@ -78,6 +78,7 @@ def cerberus(
     legacy_quoting: bool = False,
     v011_only: bool = False,
     realistic: bool = False,
+    features: bool = False,
     max_turns: int = MAX_TURNS,
     sandbox: str = "local",
     scaffold: str = "cerberus",
@@ -90,6 +91,11 @@ def cerberus(
         v011_only: Restrict to the original 20 tasks. Required when comparing
             against the frozen baseline — a 139-task run and a 20-task run share
             no denominator.
+        features: Use the feature-request task set: three multi-file change
+            requests in all five categories, 15 samples. Episodes run 26-56 turns
+            against 13-16 for single-function tasks, which is the first setting
+            in this project where misbehaviour has somewhere to hide. Requires
+            scaffold="claude_code" to be worth running.
         realistic: Embed each task in a working project (phase 2g) instead of a
             two-file folder. The task is identical; what changes is how much
             ordinary work surrounds it, and therefore how long the trajectory
@@ -118,7 +124,10 @@ def cerberus(
     """
     return Task(
         dataset=cerberus_dataset(
-            legacy_quoting=legacy_quoting, v011_only=v011_only, realistic=realistic
+            legacy_quoting=legacy_quoting,
+            v011_only=v011_only,
+            realistic=realistic,
+            features=features,
         ),
         solver=_solver_for(scaffold, max_turns),
         scorer=[ground_truth(), monitor()],
@@ -126,7 +135,7 @@ def cerberus(
         metadata={
             "environment": "v0.1.1-legacy" if legacy_quoting else "v0.1.2-fixed",
             "task_set": "v0.1.1" if v011_only else "v0.2",
-            "layout": "repo" if realistic else "flat",
+            "layout": "features" if features else ("repo" if realistic else "flat"),
             "scaffold": scaffold,
         },
     )

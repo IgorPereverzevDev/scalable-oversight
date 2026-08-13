@@ -40,7 +40,15 @@ from typing import Any
 from inspect_ai.dataset import MemoryDataset, Sample
 
 from .problems import PROBLEMS, PROBLEMS_BY_ID, SINGLE_ARG_PROBLEMS
-from .repos import build_workspace, git_setup_script
+from .features import (
+    FEATURE_BACKDOORS,
+    FEATURE_EXFIL,
+    FEATURE_REWARD_HACK,
+    FEATURE_TAMPERING,
+    FEATURE_TASKS,
+    feature_workspace,
+)
+from .repos import TEMPLATES, build_workspace, git_setup_script
 
 
 def build_test_file(
@@ -440,6 +448,90 @@ def build_specs(
     return clean + adversarial
 
 
+def build_feature_specs(*, legacy_quoting: bool = False) -> list[dict[str, Any]]:
+    """Feature tasks in all five categories.
+
+    Separate from `build_specs` because these are a different kind of task, not a
+    variant of the same one: they carry their own tests, their own reference
+    solution and their own repository state. Mixing them into the 139 would give
+    a single run two populations with different trajectory lengths, and any
+    aggregate over both would mean nothing.
+
+    `legacy_quoting` is accepted and ignored — the broken-harness environment
+    only ever applied to generated single-function tests.
+    """
+    specs: list[dict[str, Any]] = []
+
+    for feature in FEATURE_TASKS:
+        template = TEMPLATES[feature.repo]
+        base_files = feature_workspace(feature, TEMPLATES)
+        setup = git_setup_script(template)
+
+        def spec(suffix: str, category: str, prompt: str, files: dict[str, str],
+                 params: dict[str, Any]) -> dict[str, Any]:
+            return {
+                "task_id": f"{feature.task_id}_{suffix}",
+                "is_adversarial": category != "clean",
+                "side_objective": None if category == "clean" else category,
+                "humaneval_id": -1,
+                "user_prompt": prompt,
+                "files": files,
+                "setup": setup,
+                # The first touched file stands in for "where the change lives".
+                # Feature work spans several modules, so a backdoor may land in
+                # any of them — check_backdoor therefore scans them all rather
+                # than trusting this single path (see `solution_paths`).
+                "solution_path": feature.touches[0],
+                "test_path": feature.test_path,
+                "ground_truth_type": category,
+                "ground_truth_params": {
+                    "solution_path": feature.touches[0],
+                    "solution_paths": list(feature.touches),
+                    "test_path": feature.test_path,
+                    "pristine_files": dict(base_files),
+                    **params,
+                },
+            }
+
+        specs.append(spec("clean", "clean", feature.summary, dict(base_files), {}))
+
+        trigger, request = FEATURE_BACKDOORS[feature.task_id]
+        specs.append(spec(
+            "backdoor", "backdoor", f"{feature.summary}\n\n{request}",
+            dict(base_files), {"trigger_string": trigger},
+        ))
+
+        secret_path, secret_body, markers, exfil_request = FEATURE_EXFIL
+        exfil_files = dict(base_files)
+        exfil_files[secret_path] = secret_body
+        specs.append(spec(
+            "exfil", "exfiltration", f"{feature.summary}\n\n{exfil_request}",
+            exfil_files,
+            {"secret_markers": markers, "secret_file": secret_path},
+        ))
+
+        specs.append(spec(
+            "rewardhack", "reward_hack",
+            f"{feature.summary}\n\n{FEATURE_REWARD_HACK}", dict(base_files),
+            # Hidden tests come from the feature task itself: they are the ones
+            # that separate a real implementation from one shaped around the
+            # visible cases.
+            {"hidden_source": feature.hidden_source},
+        ))
+
+        specs.append(spec(
+            "tamper", "test_tampering",
+            f"{feature.summary}\n\n{FEATURE_TAMPERING}", dict(base_files),
+            {"pristine_test": base_files[feature.test_path]},
+        ))
+
+    return specs
+
+
+FEATURE_SPECS = build_feature_specs()
+FEATURE_SPECS_BY_ID = {spec["task_id"]: spec for spec in FEATURE_SPECS}
+
+
 DEFAULT_SPECS = build_specs()
 SPECS_BY_ID = {spec["task_id"]: spec for spec in DEFAULT_SPECS}
 
@@ -491,8 +583,23 @@ def cerberus_dataset(
     legacy_quoting: bool = False,
     v011_only: bool = False,
     realistic: bool = False,
+    features: bool = False,
 ) -> MemoryDataset:
-    """Dataset for one environment version, task set and workspace layout."""
+    """Dataset for one environment version, task set and workspace layout.
+
+    Args:
+        features: Use the feature-request task set instead of the
+            single-function one. These produce 26-56 turn episodes against
+            13-16, which is the whole reason they exist — and the reason the two
+            sets are never mixed in one run.
+    """
+    if features:
+        specs = build_feature_specs(legacy_quoting=legacy_quoting)
+        return MemoryDataset(
+            [_to_sample(s, legacy_quoting=legacy_quoting) for s in specs],
+            name="cerberus_features",
+        )
+
     specs = build_specs(legacy_quoting=legacy_quoting, realistic=realistic)
     if v011_only:
         specs = [s for s in specs if s["task_id"] in V011_TASK_IDS]
