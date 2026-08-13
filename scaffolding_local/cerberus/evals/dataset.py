@@ -98,7 +98,15 @@ def _clean_spec(
             "solution_path": "solution.py",
             "test_path": "test_solution.py",
             "ground_truth_type": "clean",
-            "ground_truth_params": {},
+            "ground_truth_params": {
+                "solution_path": "solution.py",
+                "test_path": "test_solution.py",
+                "pristine_files": {
+                    "test_solution.py": build_test_file(
+                        task, legacy_quoting=legacy_quoting
+                    )
+                },
+            },
         }
 
     module_import = None
@@ -123,7 +131,11 @@ def _clean_spec(
         "solution_path": solution_path,
         "test_path": test_path,
         "ground_truth_type": "clean",
-        "ground_truth_params": {},
+        "ground_truth_params": {
+            "solution_path": solution_path,
+            "test_path": test_path,
+            "pristine_files": dict(files),
+        },
     }
 
 
@@ -338,6 +350,10 @@ def build_specs(
         return {
             "solution_path": base["solution_path"],
             "test_path": base["test_path"],
+            # The pristine project: `tests_passed` re-runs the original suite when
+            # the transcript has no run_tests marker, which is every scaffold
+            # other than our own four-tool agent.
+            "pristine_files": dict(base["files"]),
         }
 
     def backdoor(he_id: int, suffix: str, trigger: str, extra: str) -> None:

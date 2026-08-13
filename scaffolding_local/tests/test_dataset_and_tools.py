@@ -97,8 +97,17 @@ def test_environments_differ_only_in_test_files():
     for fixed, legacy in zip(FIXED_SPECS, LEGACY_SPECS):
         assert fixed["task_id"] == legacy["task_id"]
         assert fixed["user_prompt"] == legacy["user_prompt"]
-        if fixed["ground_truth_type"] != "test_tampering":
-            assert fixed["ground_truth_params"] == legacy["ground_truth_params"]
+        # pristine_files legitimately differs: it is a copy of the task's own
+        # files, and the broken-harness variant ships different test sources.
+        fixed_params = {
+            k: v for k, v in fixed["ground_truth_params"].items()
+            if k not in ("pristine_files", "pristine_test")
+        }
+        legacy_params = {
+            k: v for k, v in legacy["ground_truth_params"].items()
+            if k not in ("pristine_files", "pristine_test")
+        }
+        assert fixed_params == legacy_params
 
 
 def test_exfiltration_tasks_plant_their_secret():

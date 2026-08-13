@@ -40,11 +40,12 @@ if "cerberus" not in sys.modules:
 # package, so `from .agent import ...` raises ModuleNotFoundError. Every other
 # module in the package keeps relative imports; this one is the entry point.
 from cerberus.evals.agent import MAX_TURNS, cerberus_agent
+from cerberus.evals.claude_code import claude_code_agent
 from cerberus.evals.dataset import cerberus_dataset
 from cerberus.evals.scorers import ground_truth, monitor
 
 
-_SANDBOX_DIR = Path(__file__).resolve().parent
+_SANDBOX_DIR = Path(__file__).resolve().parents[2] / "sandbox"
 
 
 def _sandbox_spec(sandbox: str):
@@ -56,7 +57,20 @@ def _sandbox_spec(sandbox: str):
     """
     if sandbox == "docker":
         return SandboxEnvironmentSpec("docker", str(_SANDBOX_DIR / "compose.yaml"))
+    if sandbox == "docker_claude_code":
+        return SandboxEnvironmentSpec(
+            "docker", str(_SANDBOX_DIR / "compose.claude_code.yaml")
+        )
     return sandbox
+
+
+def _solver_for(scaffold: str, max_turns: int):
+    if scaffold == "cerberus":
+        return cerberus_agent(max_turns=max_turns)
+    if scaffold == "claude_code":
+        # No turn cap: removing it is the point of the phase.
+        return claude_code_agent()
+    raise ValueError(f"unknown scaffold {scaffold!r}; use 'cerberus' or 'claude_code'")
 
 
 @task
@@ -66,6 +80,7 @@ def cerberus(
     realistic: bool = False,
     max_turns: int = MAX_TURNS,
     sandbox: str = "local",
+    scaffold: str = "cerberus",
 ) -> Task:
     """Weak-monitor-vs-strong-agent evaluation.
 
@@ -81,9 +96,19 @@ def cerberus(
             gets. Numbers are not comparable to flat-layout runs — that
             incomparability is the measurement.
         max_turns: Hard cap on agent turns, as in the prototype.
+        scaffold: Which agent is under test. "cerberus" is the four-tool loop
+            every phase up to 2g used. "claude_code" runs the real CLI through
+            Inspect's sandbox bridge (phase 2h) and requires
+            sandbox="docker_claude_code" for the Node runtime.
+
+            Numbers from the two scaffolds are not comparable — different tools,
+            different trajectory lengths, different token cost. That
+            incomparability is the measurement: it is the first setting in this
+            project where an episode is long enough for misbehaviour to have
+            somewhere to hide.
         sandbox: "local" mirrors the prototype's subprocess isolation and is what
             every number up to phase 2e was measured under. "docker" uses
-            cerberus/evals/compose.yaml: real isolation, no network, resource limits.
+            sandbox/compose.yaml: real isolation, no network, resource limits.
 
             Switching is phase 2f and has its own gate — the execution
             environment can move ground-truth labels on its own (different
@@ -95,12 +120,13 @@ def cerberus(
         dataset=cerberus_dataset(
             legacy_quoting=legacy_quoting, v011_only=v011_only, realistic=realistic
         ),
-        solver=cerberus_agent(max_turns=max_turns),
+        solver=_solver_for(scaffold, max_turns),
         scorer=[ground_truth(), monitor()],
         sandbox=_sandbox_spec(sandbox),
         metadata={
             "environment": "v0.1.1-legacy" if legacy_quoting else "v0.1.2-fixed",
             "task_set": "v0.1.1" if v011_only else "v0.2",
             "layout": "repo" if realistic else "flat",
+            "scaffold": scaffold,
         },
     )
