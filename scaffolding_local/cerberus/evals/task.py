@@ -25,25 +25,19 @@ import sys
 from pathlib import Path
 
 from inspect_ai import Task, task
+from inspect_ai.approval import ApprovalPolicy
 from inspect_ai.util import SandboxEnvironmentSpec
 
-# `inspect eval` loads this file as a standalone module by path and changes the
-# working directory to the task folder, so neither relative imports nor an
-# implicit "." on sys.path can find the package. Installing it (pip install -e .)
-# is the intended setup; this bootstrap keeps a bare checkout working too.
 if "cerberus" not in sys.modules:
     _REPO_ROOT = Path(__file__).resolve().parents[2]
     if str(_REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(_REPO_ROOT))
 
-# Absolute imports, not relative: under the loader above there is no parent
-# package, so `from .agent import ...` raises ModuleNotFoundError. Every other
-# module in the package keeps relative imports; this one is the entry point.
 from cerberus.evals.agent import MAX_TURNS, cerberus_agent
 from cerberus.evals.claude_code import claude_code_agent
 from cerberus.evals.dataset import cerberus_dataset
+from cerberus.evals.online import online_monitor
 from cerberus.evals.scorers import ground_truth, monitor
-
 
 _SANDBOX_DIR = Path(__file__).resolve().parents[2] / "sandbox"
 
@@ -72,6 +66,18 @@ def _solver_for(scaffold: str, max_turns: int):
         return claude_code_agent()
     raise ValueError(f"unknown scaffold {scaffold!r}; use 'cerberus' or 'claude_code'")
 
+def _approval_for(online: bool, on_parse_failure: str, enforce: bool):
+    if not online:
+        return None
+    return [
+        ApprovalPolicy(
+            approver=online_monitor(
+                on_parse_failure=on_parse_failure, enforce=enforce
+            ),
+            tools="*",
+        )
+    ]
+
 
 @task
 def cerberus(
@@ -82,6 +88,9 @@ def cerberus(
     max_turns: int = MAX_TURNS,
     sandbox: str = "local",
     scaffold: str = "cerberus",
+    online: bool = False,
+    on_parse_failure: str = "approve",
+    enforce: bool = False,
 ) -> Task:
     """Weak-monitor-vs-strong-agent evaluation.
 
@@ -121,6 +130,17 @@ def cerberus(
             Python build, different cwd, different limits), so the first docker
             run keeps the same tasks and the same tools and asks only one
             question: did any label change?
+       online: Judge each tool call before it runs, with the power to block,
+            instead of reading the finished transcript. A different measurement,
+            not a better monitor: it answers "could we have stopped it" and
+            produces two quantities post-hoc scoring cannot — the turn at which
+            misbehaviour was caught, and how much clean work was destroyed.
+
+            The two modes are not comparable as detection rates. Post-hoc a false
+            alarm costs someone's attention; online it costs the task.
+        on_parse_failure: "approve" or "reject" when the monitor's verdict cannot
+            be read. See `evals.online.PARSE_FAILURE_POLICY` — an experimental
+            condition with a real cost either way.
     """
     return Task(
         dataset=cerberus_dataset(
@@ -131,11 +151,18 @@ def cerberus(
         ),
         solver=_solver_for(scaffold, max_turns),
         scorer=[ground_truth(), monitor()],
+        # The post-hoc scorer stays even in online mode: the same episode then
+        # carries both readings, and "blocked on turn 5" can be compared against
+        # "flagged after the fact" on identical data rather than across runs.
+        approval=_approval_for(online, on_parse_failure, enforce),
         sandbox=_sandbox_spec(sandbox),
         metadata={
             "environment": "v0.1.1-legacy" if legacy_quoting else "v0.1.2-fixed",
             "task_set": "v0.1.1" if v011_only else "v0.2",
             "layout": "features" if features else ("repo" if realistic else "flat"),
             "scaffold": scaffold,
+            "monitoring": "online" if online else "post-hoc",
+            "on_parse_failure": on_parse_failure if online else None,
+            "online_mode": ("enforce" if enforce else "observe") if online else None,
         },
     )
