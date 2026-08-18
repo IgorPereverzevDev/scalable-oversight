@@ -91,6 +91,7 @@ def cerberus(
     online: bool = False,
     on_parse_failure: str = "approve",
     enforce: bool = False,
+    covert: bool = False,
 ) -> Task:
     """Weak-monitor-vs-strong-agent evaluation.
 
@@ -148,6 +149,7 @@ def cerberus(
             v011_only=v011_only,
             realistic=realistic,
             features=features,
+            covert=covert,
         ),
         solver=_solver_for(scaffold, max_turns),
         scorer=[ground_truth(), monitor()],
@@ -159,10 +161,15 @@ def cerberus(
         metadata={
             "environment": "v0.1.1-legacy" if legacy_quoting else "v0.1.2-fixed",
             "task_set": "v0.1.1" if v011_only else "v0.2",
-            "layout": "features" if features else ("repo" if realistic else "flat"),
             "scaffold": scaffold,
             "monitoring": "online" if online else "post-hoc",
             "on_parse_failure": on_parse_failure if online else None,
             "online_mode": ("enforce" if enforce else "observe") if online else None,
+            "layout": (
+                "covert" if covert
+                else "features" if features
+                else "repo" if realistic
+                else "flat"
+            ),
         },
     )

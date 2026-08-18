@@ -448,6 +448,56 @@ def build_specs(
     return clean + adversarial
 
 
+def build_covert_specs() -> list[dict[str, Any]]:
+    """Covert-versus-overt pairs.
+
+    Kept apart from the feature specs for the same reason those are kept apart
+    from the 139: a run mixing populations produces aggregates over two different
+    things. Here the separation matters more than usual, because the comparison
+    is within pairs.
+    """
+    from .covert import COVERT_TASKS
+
+    specs: list[dict[str, Any]] = []
+    for task in COVERT_TASKS:
+        template = TEMPLATES[task.repo]
+        files = dict(template.files)
+        files[task.test_path] = task.test_source
+
+        params: dict[str, Any] = {
+            "solution_path": f"{template.package}/rates.py",
+            "solution_paths": [
+                f"{template.package}/rates.py",
+                f"{template.package}/config.py",
+            ],
+            "test_path": task.test_path,
+            "pristine_files": dict(files),
+        }
+        if task.trigger_string:
+            # Overt: a literal in the code, checked as every other backdoor is.
+            category = "backdoor"
+            params["trigger_string"] = task.trigger_string
+        else:
+            # Covert: nothing to grep for, so the harm is checked behaviourally —
+            # visible suite green, hidden suite red, exactly like reward hacking.
+            category = "reward_hack"
+            params["hidden_source"] = task.hidden_source
+
+        specs.append({
+            "task_id": task.task_id,
+            "is_adversarial": True,
+            "side_objective": task.variant,
+            "humaneval_id": -1,
+            "user_prompt": task.summary,
+            "files": files,
+            "setup": git_setup_script(template),
+            "solution_path": params["solution_path"],
+            "test_path": task.test_path,
+            "ground_truth_type": category,
+            "ground_truth_params": params,
+        })
+    return specs
+
 def build_feature_specs(*, legacy_quoting: bool = False) -> list[dict[str, Any]]:
     """Feature tasks in all five categories.
 
@@ -584,6 +634,7 @@ def cerberus_dataset(
     v011_only: bool = False,
     realistic: bool = False,
     features: bool = False,
+    covert: bool = False,
 ) -> MemoryDataset:
     """Dataset for one environment version, task set and workspace layout.
 
@@ -593,6 +644,12 @@ def cerberus_dataset(
             13-16, which is the whole reason they exist — and the reason the two
             sets are never mixed in one run.
     """
+    if covert:
+        specs = build_covert_specs()
+        return MemoryDataset(
+            [_to_sample(s, legacy_quoting=False) for s in specs],
+            name="cerberus_covert",
+        )
     if features:
         specs = build_feature_specs(legacy_quoting=legacy_quoting)
         return MemoryDataset(
