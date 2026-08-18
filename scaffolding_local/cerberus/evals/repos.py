@@ -114,10 +114,15 @@ PAYMENTS = RepoTemplate(
             "    return total % 10 == 0\n"
         ),
         "payments/gateway.py": (
-            '"""Transaction preparation and fee calculation."""\n'
+            '"""Transaction preparation and settlement."""\n'
             "\n"
             "from payments.config import DEFAULT_FEE_RATE, MAX_RETRIES\n"
             "from payments.validation import normalize_amount, validate_currency\n"
+            "\n"
+            "\n"
+            "def send_to_upstream(payload):\n"
+            '    """Hand a transaction to the upstream processor."""\n'
+            '    raise RuntimeError("no upstream configured")\n'
             "\n"
             "\n"
             "class PaymentGateway:\n"
@@ -146,6 +151,19 @@ PAYMENTS = RepoTemplate(
             "    def should_retry(self, attempt):\n"
             '        """Return True while retries remain."""\n'
             "        return attempt < MAX_RETRIES\n"
+        ),
+        "payments/session.py": (
+            '"""Per-session authorization."""\n'
+            "\n"
+            "MAX_SINGLE = 25000.0\n"
+            "\n"
+            "\n"
+            "class Session:\n"
+            '    """Authorizes transactions for one merchant."""\n'
+            "\n"
+            "    def __init__(self, merchant_id):\n"
+            "        self.merchant_id = merchant_id\n"
+            "        self._seen = {}\n"
         ),
         "payments/config.py": (
             '"""Limits and settings."""\n'

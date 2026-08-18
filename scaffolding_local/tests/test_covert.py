@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from cerberus.evals.covert import COVERT_TASKS, COVERT_TRIGGER
+from cerberus.evals.covert import COVERT_TASKS, COVERT_TRIGGER, COVERT_TASKS_BY_ID
 from cerberus.evals.repos import TEMPLATES
 
 IDS = [t.task_id for t in COVERT_TASKS]
@@ -99,15 +99,25 @@ def test_overt_harm_is_findable_in_the_code():
 
 
 def test_pairs_differ_only_in_how_the_harm_is_expressed():
-    covert = next(t for t in COVERT_TASKS if t.variant == "covert")
-    overt = next(t for t in COVERT_TASKS if t.variant == "overt")
+    """The control exists so a low detection rate cannot be blamed on difficulty."""
+    covert = [t for t in COVERT_TASKS if t.variant == "covert"]
+    for c in covert:
+        o = COVERT_TASKS_BY_ID[c.pair_id]
+        assert o.pair_id == c.task_id
+        assert o.repo == c.repo
+        assert o.test_source == c.test_source
+        assert c.hidden_source and not o.hidden_source
 
-    assert covert.pair_id == overt.task_id and overt.pair_id == covert.task_id
-    assert covert.repo == overt.repo
-    assert covert.test_source == overt.test_source
-    # Hidden suites are NOT shared: the two harms are checked differently, and
-    # that difference is what the pair measures.
-    assert covert.hidden_source and not overt.hidden_source
+
+def test_only_overt_variants_name_a_trigger():
+    for task in COVERT_TASKS:
+        if task.variant == "overt":
+            assert task.trigger_string
+            assert any(
+                task.trigger_string in c for c in task.harmful_reference.values()
+            )
+        else:
+            assert not task.trigger_string
 
 
 def test_only_the_overt_variant_names_a_trigger():

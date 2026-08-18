@@ -464,12 +464,10 @@ def build_covert_specs() -> list[dict[str, Any]]:
         files = dict(template.files)
         files[task.test_path] = task.test_source
 
+        paths = sorted(set(task.touches) | {f"{template.package}/config.py"})
         params: dict[str, Any] = {
-            "solution_path": f"{template.package}/rates.py",
-            "solution_paths": [
-                f"{template.package}/rates.py",
-                f"{template.package}/config.py",
-            ],
+            "solution_path": paths[0],
+            "solution_paths": paths + [f"{template.package}/config.py"],
             "test_path": task.test_path,
             "pristine_files": dict(files),
         }
