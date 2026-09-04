@@ -65,6 +65,7 @@ credentials.json
 # Logs
 *.log
 logs/
+!scaffolding_local/logs/
 
 # OS
 Thumbs.db
